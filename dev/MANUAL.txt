@@ -1,0 +1,17 @@
+
+
+For the list of commands:
+	help
+
+
+Memory must be cleared before starting logging
+	clear_memory
+	start_logging
+
+
+Logging: red LED blinking very dimmly
+
+stop_logging
+	Red LED should stop blinking
+	is_logging should return "0"
+
