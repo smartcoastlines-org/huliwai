@@ -4,4 +4,4 @@
 
 The huliwai GitHub repository is the home for open-source code to work with the sensor loggers. Python scripts are available for interfacing with the sensors, verifying operations, collecting real-time sensor data, initiating a deployment schedule, downloading data, converting binary data files to csv, plotting data, and more. 
 
-The huliwai sensor was originally developed in Brian Glazer's lab for the smartalawai.org project, funded by the University of Hawaii at Manoa. Additional development and outreach support has been leveraged with support from the National Science Foundation, Schmidt Marine Technology Partners, and through a collaboration with the Purple Maia Foundation enabled by an EPA Environmental Education award. 
+The huliwai sensor was originally developed by Hou In "Stanley" Lio in Brian Glazer's lab for the smartalawai.org project, funded by the University of Hawaii at Manoa. Additional development and outreach support has been leveraged with support from the National Science Foundation, Schmidt Marine Technology Partners, and through a collaboration with the Purple Maia Foundation enabled by an EPA Environmental Education award. 
