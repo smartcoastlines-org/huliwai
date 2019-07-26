@@ -1,0 +1,15 @@
+A typical workflow:
+
+Start logging:
+	start_logging.py
+
+(Deploy and recovery)
+
+Stop logging and download data:
+	read_memory.py
+
+Convert binary file to CSV:
+	bin2csv.py
+
+Plot CSV file:
+	plot_csv.py
