@@ -1,0 +1,7 @@
+one master log / one log per device logging events such as
+	logging started
+	logging stopped
+	logging terminated
+	memory cleared
+	RTC set
+	...
