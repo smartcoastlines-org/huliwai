@@ -6,4 +6,4 @@ The huliwai GitHub repository is the home for open-source code to work with the 
 
 The huliwai sensor was originally developed by Stanley H.I. Lio in Brian Glazer's lab for the smartalawai.org project, funded by the University of Hawaii at Manoa. Additional development and outreach support has been leveraged with support from the National Science Foundation, Schmidt Marine Technology Partners, and through a collaboration with the Purple Maia Foundation enabled by an EPA Environmental Education award. 
 
-![image] (https://github.com/smartcoastlines-org/huliwai/blob/master/huliwai_stream.png)
+![image](/huliwai_stream.png)
