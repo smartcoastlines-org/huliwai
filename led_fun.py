@@ -24,6 +24,8 @@ if '' == PORT:
 
 with Serial(PORT, 115200, timeout=1) as ser:
 
+    save_default_port(PORT)
+
     while True:
         ser.write(next(cmds).encode())
         time.sleep(0.1)

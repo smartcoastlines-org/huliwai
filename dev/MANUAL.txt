@@ -1,6 +1,6 @@
 
 
-For the list of commands:
+For a list of commands:
 	help
 
 

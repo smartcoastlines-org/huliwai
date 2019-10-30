@@ -4,17 +4,16 @@
 # Timestamps are reconstructed from the config file "[ID].config"
 # Output will be named "[ID].csv"
 #
-# MESH Lab
-# University of Hawaii
-# Copyright 2018 Stanley H.I. Lio
+# Stanley H.I. Lio
 # hlio@hawaii.edu
+# MESHLAB, UH Manoa
 import struct, math, sys, csv, json, logging
 from datetime import datetime
 from glob import glob
 from os.path import join, exists, basename, isdir, isfile
 import numpy as np
 from scipy.stats import describe
-from common import SAMPLE_INTERVAL_CODE_MAP, ts2dt, dt2ts
+from common import SPI_FLASH_PAGE_SIZE_BYTE, SAMPLE_INTERVAL_CODE_MAP, SAMPLE_SIZE, ts2dt, dt2ts
 
 
 def find(pattern, *_, dironly=False, fileonly=False, default=None):
@@ -58,13 +57,49 @@ def find(pattern, *_, dironly=False, fileonly=False, default=None):
             else:
                 return FN[int(r) - 1]
 
+def construct_timestamp(logging_start_time, sample_count, interval_second):
+    ts = np.linspace(0, sample_count - 1, num=sample_count)
+    ts *= interval_second
+    ts += logging_start_time
+    return ts
+
+def bin2csv(fn_bin, fn_csv, config):
+    logging.debug('Reading and parsing binary file...')
+    D = []
+    with open(fn_bin, 'rb') as fin:
+        while True:
+            page = fin.read(SPI_FLASH_PAGE_SIZE_BYTE)
+            if len(page) < SPI_FLASH_PAGE_SIZE_BYTE:
+                break
+
+            L = list(range(0, SPI_FLASH_PAGE_SIZE_BYTE, SAMPLE_SIZE))
+            for a,b in list(zip(L[::], L[1::])):
+                d = struct.unpack('ffHHHHHH', page[a:b])
+                if any([math.isnan(dd) for dd in d]):
+                    break
+                D.append(d)
+
+    logging.debug('Reconstructing time axis...')
+    ts = construct_timestamp(config['logging_start_time'], len(D), SAMPLE_INTERVAL_CODE_MAP[config['logging_interval_code']])
+    dt = [ts2dt(tmp) for tmp in ts]
+    tmp = list(zip(*D))
+    tmp.insert(0, ts)
+    tmp.insert(0, dt)
+    D = zip(*tmp)
+
+    logging.debug('Writing to {}...'.format(fn_csv))
+    with open(fn_csv, 'w', newline='') as fout:
+        writer = csv.writer(fout, delimiter=',')
+        fs = [str, str, lambda x: '{:.4f}'.format(x), lambda x: '{:.3f}'.format(x), str, str, str, str, str, str]
+        writer.writerow(['UTC_datetime', 'posix_timestamp', 'T_DegC', 'P_kPa', 'ambient_light_hdr', 'white_light_hdr', 'red', 'green', 'blue', 'white'])
+        for d in D:
+            #writer.writerow([str(x) for x in d])
+            writer.writerow([f(x) for f,x in zip(fs, d)])
+    
 
 if '__main__' == __name__:
 
     logging.basicConfig(level=logging.WARNING)
-
-    SAMPLE_SIZE = 20    # size of one sample in byte
-    PAGE_SIZE = 256
 
     while True:
         d = find('data/*', dironly=True)
@@ -78,90 +113,15 @@ if '__main__' == __name__:
             logging.debug(binfilename)
             break
     
-    # Names of the binary data file, the configuration file, and the output file
-    #binfilename = 'data/{}/{}_{}.bin'.format(flash_id, flash_id, max(FNT))
-    #configfilename = 'data/{}/{}_{}.config'.format(flash_id, flash_id, max(FNT))
-    #outputfilename = 'data/{}/{}_{}.csv'.format(flash_id, flash_id, max(FNT))
-
     #binfilename = input('Input path to binary file: ').strip()
     configfilename = binfilename.rsplit('.')[0] + '.config'
     outputfilename = configfilename.rsplit('.')[0] + '.csv'
-
     assert exists(binfilename)
     assert exists(configfilename)
-    #assert not exists(outputfilename)
-
     print('Data file: {}'.format(binfilename))
     print('Configuration file: {}'.format(configfilename))
-
-    buf = bytearray()
-    with open(binfilename, 'rb') as fin:
-        buf = fin.read()
-
-    #print(buf)
-    #print(len(buf))
-
-
-    print('Parsing...')
-    good = True
-    D = []
-    for page in range(len(buf)//PAGE_SIZE):
-        if not good:
-            break
-        try:
-    #        print('Page address: 0x{:06X}'.format(page*PAGE_SIZE))
-            for i in range(0, PAGE_SIZE//SAMPLE_SIZE):
-                #t,p, als,white, r,g,b,w = struct.unpack('ffHHHHHH', buf[page*PAGE_SIZE + i*SAMPLE_SIZE: page*PAGE_SIZE + i*SAMPLE_SIZE + SAMPLE_SIZE])
-                d = struct.unpack('ffHHHHHH', buf[page*PAGE_SIZE + i*SAMPLE_SIZE: page*PAGE_SIZE + i*SAMPLE_SIZE + SAMPLE_SIZE])
-                #print('{:.3f}, {:.2f}, {}, {}, {}, {}, {}, {}'.format(t,p,als,white,r,g,b,w))
-                if any([math.isnan(dd) for dd in d]):
-                    good = False
-                    break
-                D.append(d)
-                
-        except KeyboardInterrupt:
-            break
-
-    # reconstruct time axis using logging start time and sample interval
-    print('Reading config {}'.format(configfilename))
     config = json.loads(open(configfilename).read())
-    logging_start_time = config['logging_start_time']
-    logging_stop_time = config.get('logging_stop_time', None)
 
-    if logging_stop_time is not None and logging_stop_time > logging_start_time:
-        print('{} samples from {} to {} spanning {}'.format(len(D),
-                                                            ts2dt(logging_start_time),
-                                                            ts2dt(logging_stop_time),
-                                                            ts2dt(logging_stop_time) - ts2dt(logging_start_time)))
-        print('Effective sample rate {:.3f} sample/second or an average interval of {:.3f} second'.format(
-            len(D)/(logging_stop_time - logging_start_time),
-            (logging_stop_time - logging_start_time)/len(D)))
-    else:
-        logging.warning('No record of logging_stop_time. Are the batteries good? Did someone remove power without stopping logging first?')
-
-    logging_interval_code = config['logging_interval_code']
-
-
-    print('Reconstructing time axis...')
-    ts = np.linspace(0, len(D) - 1, num=len(D))
-    ts *= SAMPLE_INTERVAL_CODE_MAP[logging_interval_code]
-    ts += logging_start_time
-    dt = [ts2dt(tmp) for tmp in ts]
-    #print(ts[0:10])
-    #sys.exit()
-
-    DT = list(zip(*D))
-    DT.insert(0, ts)
-    DT.insert(0, dt)
-    D = zip(*DT)
-
-    print('Writing to {}...'.format(outputfilename))
-    with open(outputfilename, 'w', newline='') as fout:
-        writer = csv.writer(fout, delimiter=',')
-        writer.writerow(['UTC_datetime', 'posix_timestamp', 'T_DegC', 'P_kPa', 'ambient_light_hdr', 'white_light_hdr', 'red', 'green', 'blue', 'white'])
-        for d in D:
-            writer.writerow([str(x) for x in d])
-
-    #ts, t,p, als,white, r,g,b,w = zip(*D)
+    bin2csv(binfilename, outputfilename, config)
 
     print('Done.')

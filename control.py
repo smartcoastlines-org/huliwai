@@ -1,16 +1,23 @@
+# Just for fun.
+#
 #http://effbot.org/tkinterbook/tkinter-classes.htm
-from tkinter import *
-import logging, time
+#
+# Stanley H.I. Lio
+# hlio@hawaii.edu
+# MESHLAB, UH Manoa
+import tkinter as tk
+import logging, time, sys
+from functools import partial
 from serial import Serial
 from common import get_logger_name, get_flash_id, read_vbatt
 from common import serial_port_best_guess, save_default_port
-from dev.set_rtc import set_rtc, read_rtc
+from dev.set_rtc import set_rtc, read_rtc, ts2dt
 
 
 print('Detected ports:')
 DEFAULT_PORT = serial_port_best_guess(prompt=True)
 print('- - -')
-PORT = input('PORT=? (default={})'.format(DEFAULT_PORT)).strip()
+PORT = input('Which one to use? (default={})'.format(DEFAULT_PORT)).strip()
 # empty input, use default
 if '' == PORT:
     PORT = DEFAULT_PORT
@@ -20,114 +27,117 @@ with Serial(PORT, 115200, timeout=1) as ser:
     save_default_port(PORT)
 
 
+def get_name(ent):
+    logging.debug('get_name')
+    with Serial(PORT, 115200, timeout=1) as ser:
+        ent.delete(0, tk.END)
+        ent.insert(0, get_logger_name(ser))
+
+def get_id(ent):
+    logging.debug('get_id')
+    with Serial(PORT, 115200, timeout=1) as ser:
+        ent.delete(0, tk.END)
+        ent.insert(0, get_flash_id(ser))
+
+def read_battery_voltage(ent):
+    logging.debug('get_vbatt')
+    with Serial(PORT, 115200, timeout=1) as ser:
+        ent.delete(0, tk.END)
+        ent.insert(0, '{} V'.format(read_vbatt(ser)))
+
+def read_clock(ent):
+    logging.debug('read_clock')
+    with Serial(PORT, 115200, timeout=1) as ser:
+        ent.delete(0, tk.END)
+        ent.insert(0, '{}'.format(ts2dt(read_rtc(ser))))
+
+def set_clock(ent):
+    logging.debug('set_clock')
+    with Serial(PORT, 115200, timeout=1) as ser:
+        set_rtc(ser)
+
+def read_temperature(ent):
+    logging.debug('read_temperature')
+    with Serial(PORT, 115200, timeout=1) as ser:
+        ser.write(b'read_temperature')
+        ent.delete(0, tk.END)
+        v = ser.readline().decode().strip()
+        v = v.split(' ')[0]
+        ent.insert(0, '{} \u00b0C'.format(v))
+
+def read_pressure(ent):
+    logging.debug('read_pressure')
+    with Serial(PORT, 115200, timeout=1) as ser:
+        ser.write(b'read_pressure')
+        ent.delete(0, tk.END)
+        v = ser.readline().decode().strip()
+        ent.insert(0, v)
+
+def read_ambient_lx(ent):
+    logging.debug('read_ambient_lx')
+    with Serial(PORT, 115200, timeout=1) as ser:
+        ser.write(b'read_ambient_lx')
+        ent.delete(0, tk.END)
+        ent.insert(0, ser.readline().decode().strip().split(',')[0])
+
+def read_rgbw(ent):
+    logging.debug('read_rgbw')
+    with Serial(PORT, 115200, timeout=1) as ser:
+        ser.write(b'read_rgbw')
+        ent.delete(0, tk.END)
+        ent.insert(0, ser.readline().decode().strip())
+
+def led_red(ent):
+    logging.debug('led_red')
+    if 'on' not in led_red.__dict__: led_red.on = True
+    with Serial(PORT, 115200, timeout=1) as ser:
+        ser.write(b'red_led_on' if led_red.on else b'red_led_off')
+    led_red.on = not led_red.on
+
+def led_green(ent):
+    logging.debug('led_green')
+    if 'on' not in led_green.__dict__: led_green.on = True
+    with Serial(PORT, 115200, timeout=1) as ser:
+        ser.write(b'green_led_on' if led_green.on else b'green_led_off')
+    led_green.on = not led_green.on
+
+def led_blue(ent):
+    logging.debug('led_blue')
+    if 'on' not in led_blue.__dict__: led_blue.on = True
+    with Serial(PORT, 115200, timeout=1) as ser:
+        ser.write(b'blue_led_on' if led_blue.on else b'blue_led_off')
+    led_blue.on = not led_blue.on
+
+
 class App:
     def __init__(self, master):
-        
-        row1 = Frame(master)
-        row1.pack()
+        self.B = [['READ NAME', get_name, True],
+                  ['READ ID', get_id, True],
+                  ['READ BATTERY VOLTAGE', read_battery_voltage, True],
+                  ['READ CLOCK', read_clock, True],
+                  ['SET CLOCK', set_clock, False],
+                  ['READ TEMPERATURE', read_temperature, True],
+                  ['READ PRESSURE', read_pressure, True],
+                  ['READ LIGHT', read_ambient_lx, True],
+                  ['READ RGB+W', read_rgbw, True],
+                  ['RED', led_red, False],
+                  ['GREEN', led_green, False],
+                  ['BLUE', led_blue, False],
+                  ]
 
-        row_status = Frame(master)
-        row_status.pack()
+        for b in self.B:
+            row = tk.Frame(master)
+            ent = None
+            if b[2]:
+                ent = tk.Entry(row)
+            # lambda is late-binding. This won't fly.
+            #btn = tk.Button(row, text=b[0], width=24, command=lambda ent=ent: b[1](ent))
+            btn = tk.Button(row, text=b[0], width=24, command=partial(b[1], ent))
+            row.pack(side=tk.TOP, fill=tk.X, padx=5, pady=5)
+            btn.pack(side=tk.LEFT)
+            if b[2]:
+                ent.pack(side=tk.RIGHT, expand=tk.YES, fill=tk.X)
 
-        row_sensors = Frame(master)
-        row_sensors.pack()
-        
-        row_memory = Frame(master)
-        row_memory.pack()
-
-        row_led = Frame(master)
-        row_led.pack()
-
-        row_config = Frame(master)
-        row_config.pack()
-
-        row_logging = Frame(master)
-        row_logging.pack()
-
-        self.label1 = StringVar()
-        self.label = Label(row1, textvariable=self.label1)
-        self.label.pack(side=LEFT)
-
-        self.get_name = Button(row_status, text='GET NAME', command=self.get_name)
-        self.get_name.pack(side=LEFT)
-
-        self.get_id = Button(row_status, text='GET ID', command=self.get_id)
-        self.get_id.pack(side=LEFT)
-
-        self.get_vbatt = Button(row_status, text='READ BATTERY VOLTAGE', command=self.get_vbatt)
-        self.get_vbatt.pack(side=LEFT)
-
-        self.read_temperature = Button(row_sensors, text='READ TEMPERATURE', command=self.read_temperature)
-        self.read_temperature.pack(side=LEFT)
-
-        self.read_pressure = Button(row_sensors, text='READ PRESSURE', command=self.read_pressure)
-        self.read_pressure.pack(side=LEFT)
-
-        self.read_ambient_lx = Button(row_sensors, text='READ AMBIENT', command=self.read_ambient_lx)
-        self.read_ambient_lx.pack(side=LEFT)
-
-        self.read_memory = Button(row_memory, text='EXTRACT DATA', command=self.read_memory)
-        self.read_memory.pack(side=LEFT)
-
-        self.clear_memory = Button(row_memory, text='CLEAR MEMORY', command=self.clear_memory)
-        self.clear_memory.pack(side=LEFT)
-
-        self.red_led_on = Button(row_led, text='RED ON', fg='red', command=self.red_led_on)
-        self.red_led_on.pack(side=LEFT)
-
-        self.red_led_off = Button(row_led, text='RED OFF', command=self.red_led_off)
-        self.red_led_off.pack(side=LEFT)
-
-        self.green_led_on = Button(row_led, text='GREEN ON', fg='green', command=self.green_led_on)
-        self.green_led_on.pack(side=LEFT)
-
-        self.green_led_off = Button(row_led, text='GREEN OFF', command=self.green_led_off)
-        self.green_led_off.pack(side=LEFT)
-
-        self.blue_led_on = Button(row_led, text='BLUE ON', fg='blue', command=self.blue_led_on)
-        self.blue_led_on.pack(side=LEFT)
-
-        self.blue_led_off = Button(row_led, text='BLUE OFF', command=self.blue_led_off)
-        self.blue_led_off.pack(side=LEFT)
-
-
-        self.v = IntVar()
-        self.v.set(2)
-        self.radio1 = Radiobutton(row_config, text='0.2 second', variable=self.v, value=0)
-        self.radio1.pack(anchor=W)
-        self.radio2 = Radiobutton(row_config, text='1 second', variable=self.v, value=1)
-        self.radio2.pack(anchor=W)
-        self.radio3 = Radiobutton(row_config, text='60 second', variable=self.v, value=2)
-        self.radio3.pack(anchor=W)
-
-        self.set_logging_interval = Button(row_config, text='SET SAMPLING INTERVAL', command=self.set_logging_interval)
-        self.set_logging_interval.pack(side=LEFT)
-        
-        self.set_clock = Button(row_logging, text='SET CLOCK', command=self.set_clock)
-        self.set_clock.pack(side=LEFT)
-
-        self.start_logging = Button(row_logging, text='START Logging', command=self.start_logging)
-        self.start_logging.pack(side=LEFT)
-
-        self.stop_logging = Button(row_logging, text='STOP Logging', command=self.stop_logging)
-        self.stop_logging.pack(side=LEFT)
-
-        #self.button = Button(row_status, text='QUIT', fg='red', command=row.quit)
-        #self.button.pack(side=LEFT)
-
-        #self.text = Text(row_logging)
-        #self.text.pack(side=LEFT)
-
-    def get_name(self):
-        logging.debug('get_name')
-        with Serial(PORT, 115200, timeout=1) as ser:
-            self.label1.set(get_logger_name(ser))
-
-    def get_id(self):
-        logging.debug('get_id')
-        with Serial(PORT, 115200, timeout=1) as ser:
-            self.label1.set(get_flash_id(ser))
-    
     def read_memory(self):
         logging.debug('read_memory')
 
@@ -142,30 +152,6 @@ class App:
 
     def set_logging_interval(self):
         print(self.v.get())
-
-    def get_vbatt(self):
-        logging.debug('get_vbatt')
-        with Serial(PORT, 115200, timeout=1) as ser:
-            self.label1.set(str(read_vbatt(ser)) + 'V')
-
-    def read_temperature(self):
-        logging.debug('read_temperature')
-        with Serial(PORT, 115200, timeout=1) as ser:
-            ser.write(b'read_temperature')
-            self.label1.set(ser.readline().decode().strip())
-
-    def read_pressure(self):
-        logging.debug('read_pressure')
-        with Serial(PORT, 115200, timeout=1) as ser:
-            ser.write(b'read_pressure')
-            self.label1.set(ser.readline().decode().strip())
-
-    def read_ambient_lx(self):
-        logging.debug('read_ambient_lx')
-        with Serial(PORT, 115200, timeout=1) as ser:
-            ser.write(b'read_ambient_lx')
-            r = ser.readline().decode().strip().split(',')[0]
-            self.label1.set(r)
 
     def set_clock(self):
         logging.debug('set_rtc')
@@ -200,13 +186,7 @@ class App:
 
 logging.basicConfig(level=logging.DEBUG)
 
-root = Tk()
-
+root = tk.Tk()
 app = App(root)
-
 root.mainloop()
 #root.destroy()
-
-
-
-

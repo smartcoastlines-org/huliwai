@@ -6,7 +6,7 @@
 # hlio@hawaii.edu
 import sys, time, logging
 from serial import Serial
-from common import get_logger_name, get_flash_id, is_logging, stop_logging
+from common import get_logger_name, get_flash_id, is_logging, stop_logging, InvalidResponseException
 
 
 logging.basicConfig(level=logging.WARNING)
@@ -24,14 +24,18 @@ if '' == PORT:
 with Serial(PORT, 115200, timeout=1) as ser:
 
     save_default_port(PORT)
-    
-    if is_logging(ser):
-        r = input('Cannot rename logger while it is running. Stop it? (yes/no; default=no)')
-        if 'yes' == r.strip():
-            stop_logging(ser)
-        else:
-            print('Terminating.')
-            sys.exit()
+
+    try:
+        if is_logging(ser):
+            r = input('Cannot rename logger while it is running. Stop it? (yes/no; default=no)')
+            if 'yes' == r.strip():
+                stop_logging(ser)
+            else:
+                print('Terminating.')
+                sys.exit()
+    except InvalidResponseException:
+        print('No response from logger. Terminating.')
+        sys.exit()
 
     try:
         name = get_logger_name(ser)

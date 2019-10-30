@@ -1,22 +1,18 @@
-# Read the logger's memory into a binary file. Stops when empty page is reached.
+# Extract data from logger into a CSV and a binary file.
 #
-# Formally "read_range_with_crc.py"
-#
-# MESH Lab
-# University of Hawaii
-# Copyright 2018 Stanley H.I. Lio
+# Stanley H.I. Lio
 # hlio@hawaii.edu
+# MESHLAB, UH Manoa
 import time, logging, sys, json
 from os import makedirs
 from os.path import join, exists
 from serial import Serial
 from serial.serialutil import SerialException
 from dev.crc_check import check_response
-from common import is_logging, stop_logging, get_logging_config, read_vbatt, get_logger_name, get_flash_id, InvalidResponseException, SAMPLE_INTERVAL_CODE_MAP
-
-
-SPI_FLASH_SIZE_BYTE = 16*1024*1024
-SPI_FLASH_PAGE_SIZE_BYTE = 256
+from common import SPI_FLASH_SIZE_BYTE, SPI_FLASH_PAGE_SIZE_BYTE, SAMPLE_INTERVAL_CODE_MAP,\
+     is_logging, stop_logging, get_logging_config, read_vbatt, get_logger_name, get_flash_id,\
+     InvalidResponseException
+from bin2csv import bin2csv
 
 
 logging.basicConfig(level=logging.WARNING)
@@ -29,8 +25,8 @@ END = SPI_FLASH_SIZE_BYTE - 1
 # request this many bytes each time (there's CRC32 at the end of each transaction)
 STRIDE = 16*SPI_FLASH_PAGE_SIZE_BYTE
 # retry at most this many times on comm error
-MAX_RETRY = 10
-# stop reading if latest response is all empty (0xFF for NOR flash)
+MAX_RETRY = 16
+# stop reading if the response is all empty (0xff for NOR flash)
 STOP_ON_EMPTY = True
 
 
@@ -56,19 +52,16 @@ def read_range_core(ser, begin, end):
             time.sleep(0.1)
             logging.warning('CRC failure')
             continue
+        
         return line[:-4]    # strip CRC32
+    
     return bytearray()
-
 
 def split_range(begin, end, pkt_size):
     assert end >= begin
-    pairs = []
-    currentaddr = begin
-    while currentaddr <= end:
-        stride = min(end - currentaddr + 1, pkt_size)
-        pairs.append([currentaddr, currentaddr + stride - 1])
-        currentaddr += stride
-    return pairs
+    A = tuple(range(begin, end, pkt_size))
+    B = [x + pkt_size - 1 for x in A]
+    return list(zip(A, B))
 
 
 if '__main__' == __name__:
@@ -84,6 +77,8 @@ if '__main__' == __name__:
         PORT = DEFAULT_PORT
 
     with Serial(PORT, 115200, timeout=2) as ser:
+
+        save_default_port(PORT)
 
         ser.reset_input_buffer()
         ser.reset_output_buffer()
@@ -103,8 +98,6 @@ if '__main__' == __name__:
                 print('No change made. Terminating.')
                 sys.exit()
 
-        save_default_port(PORT)
-
         try:
             logger_name = get_logger_name(ser)
             print('Name: {}'.format(logger_name))
@@ -114,12 +107,10 @@ if '__main__' == __name__:
             print('Cannot read logger name/ID. Terminating.')
             sys.exit()
 
-        #if '' == name:
-        #    name = 'noname'
-        #makedirs(join('data', flash_id + ' ({})'.format(logger_name)), exist_ok=True)
         makedirs(join('data', flash_id), exist_ok=True)
 
-        # store meta data to config file
+        # An existing .config file is not required to generate the final CSV, but there are
+        # a few things like vbatt_pre that I want to preserve if it's there.
         metadata = get_logging_config(ser)
         logging.debug(metadata)
 
@@ -146,16 +137,16 @@ if '__main__' == __name__:
 
         print('Sample interval = {} second'.format(SAMPLE_INTERVAL_CODE_MAP[config['logging_interval_code']]))
 
-        fn = '{}_{}.bin'.format(flash_id, metadata['logging_start_time'])
-        fn = join('data', flash_id, fn)
-        if exists(fn):
-            r = input(fn + ' already exists. Overwrite? (yes/no; default=no)')
+        fn_bin = '{}_{}.bin'.format(flash_id, metadata['logging_start_time'])
+        fn_bin = join('data', flash_id, fn_bin)
+        if exists(fn_bin):
+            r = input(fn_bin + ' already exists. Overwrite? (yes/no; default=no)')
             if r.strip().lower() != 'yes':
                 print('No change made. Terminating.')
                 sys.exit()
 
         starttime = time.time()
-        with open(fn, 'wb') as fout:
+        with open(fn_bin, 'wb') as fout:
             for begin, end in split_range(BEGIN, END, STRIDE):
                 print('Reading {:X} to {:X} ({:.2f}% of total capacity)'.format(begin, end, end/SPI_FLASH_SIZE_BYTE*100))
                 line = read_range_core(ser, begin, end)
@@ -167,7 +158,9 @@ if '__main__' == __name__:
                 fout.write(line)
         endtime = time.time()
 
-    print('Output file: {}'.format(fn))
-    #input('Took {:.1f} minutes. Press RETURN to exit.'.format((endtime - starttime)/60))
+    # - - - - -
+    fn_csv = fn_bin.rsplit('.')[0] + '.csv'
+    bin2csv(fn_bin, fn_csv, config)
+    print('Output CSV file: {}'.format(fn_csv))
+    print('Output binary file: {}'.format(fn_bin))
     print('Took {:.1f} minutes.'.format((endtime - starttime)/60))
-    

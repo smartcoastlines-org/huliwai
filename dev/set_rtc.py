@@ -23,8 +23,13 @@ def ts2dt(ts=None):
         ts = dt2ts()
     return datetime.utcfromtimestamp(ts)
 
-def set_rtc(ser, t):
+def set_rtc(ser, t=None):
+    if t is None:
+        t = time.time()
     ser.flushInput()
+    ser.flushOutput()
+    ser.reset_input_buffer()
+    ser.reset_output_buffer()
     ser.write('write_rtc{}\n'.format(math.floor(t)).encode())
     return ser.readline().decode()
 

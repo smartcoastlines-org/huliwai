@@ -6,15 +6,14 @@
 # TODO:
 #   get calibration eeprom
 #
-# 0.2s, 1s, 60s
+# Possible intervals: 0.2s, 1s, 60s
 #
 # Will reset config file
 # May add vbatt_pre and start_logging_time
 #
-# MESH Lab
-# University of Hawaii
-# Copyright 2018 Stanley H.I. Lio
+# Stanley H.I. Lio
 # hlio@hawaii.edu
+# MESHLAB, UH Manoa
 import time, json, sys, logging
 from os import makedirs
 from os.path import join, exists
