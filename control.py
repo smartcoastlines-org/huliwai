@@ -30,26 +30,34 @@ with Serial(PORT, 115200, timeout=1) as ser:
 def get_name(ent):
     logging.debug('get_name')
     with Serial(PORT, 115200, timeout=1) as ser:
+        ent.config(state='normal')
         ent.delete(0, tk.END)
         ent.insert(0, get_logger_name(ser))
+        ent.config(state='readonly')
 
 def get_id(ent):
     logging.debug('get_id')
     with Serial(PORT, 115200, timeout=1) as ser:
+        ent.config(state='normal')
         ent.delete(0, tk.END)
         ent.insert(0, get_flash_id(ser))
+        ent.config(state='readonly')
 
 def read_battery_voltage(ent):
     logging.debug('get_vbatt')
     with Serial(PORT, 115200, timeout=1) as ser:
+        ent.config(state='normal')
         ent.delete(0, tk.END)
         ent.insert(0, '{} V'.format(read_vbatt(ser)))
+        ent.config(state='readonly')
 
 def read_clock(ent):
     logging.debug('read_clock')
     with Serial(PORT, 115200, timeout=1) as ser:
+        ent.config(state='normal')
         ent.delete(0, tk.END)
         ent.insert(0, '{}'.format(ts2dt(read_rtc(ser))))
+        ent.config(state='readonly')
 
 def set_clock(ent):
     logging.debug('set_clock')
@@ -60,32 +68,40 @@ def read_temperature(ent):
     logging.debug('read_temperature')
     with Serial(PORT, 115200, timeout=1) as ser:
         ser.write(b'read_temperature')
+        ent.config(state='normal')
         ent.delete(0, tk.END)
         v = ser.readline().decode().strip()
         v = v.split(' ')[0]
         ent.insert(0, '{} \u00b0C'.format(v))
+        ent.config(state='readonly')
 
 def read_pressure(ent):
     logging.debug('read_pressure')
     with Serial(PORT, 115200, timeout=1) as ser:
         ser.write(b'read_pressure')
+        ent.config(state='normal')
         ent.delete(0, tk.END)
         v = ser.readline().decode().strip()
         ent.insert(0, v)
+        ent.config(state='readonly')
 
 def read_ambient_lx(ent):
     logging.debug('read_ambient_lx')
     with Serial(PORT, 115200, timeout=1) as ser:
         ser.write(b'read_ambient_lx')
+        ent.config(state='normal')
         ent.delete(0, tk.END)
         ent.insert(0, ser.readline().decode().strip().split(',')[0])
+        ent.config(state='readonly')
 
 def read_rgbw(ent):
     logging.debug('read_rgbw')
     with Serial(PORT, 115200, timeout=1) as ser:
         ser.write(b'read_rgbw')
+        ent.config(state='normal')
         ent.delete(0, tk.END)
         ent.insert(0, ser.readline().decode().strip())
+        ent.config(state='readonly')
 
 def led_red(ent):
     logging.debug('led_red')
@@ -111,25 +127,26 @@ def led_blue(ent):
 
 class App:
     def __init__(self, master):
-        self.B = [['READ NAME', get_name, True],
-                  ['READ ID', get_id, True],
-                  ['READ BATTERY VOLTAGE', read_battery_voltage, True],
-                  ['READ CLOCK', read_clock, True],
-                  ['SET CLOCK', set_clock, False],
-                  ['READ TEMPERATURE', read_temperature, True],
-                  ['READ PRESSURE', read_pressure, True],
-                  ['READ LIGHT', read_ambient_lx, True],
-                  ['READ RGB+W', read_rgbw, True],
-                  ['RED', led_red, False],
-                  ['GREEN', led_green, False],
-                  ['BLUE', led_blue, False],
+        self.B = [['READ NAME', get_name, 'r'],
+                  ['READ ID', get_id, 'r'],
+                  ['READ BATTERY VOLTAGE', read_battery_voltage, 'r'],
+                  ['READ CLOCK', read_clock, 'r'],
+                  ['SET CLOCK', set_clock, ''],
+                  ['READ TEMPERATURE', read_temperature, 'r'],
+                  ['READ PRESSURE', read_pressure, 'r'],
+                  ['READ LIGHT', read_ambient_lx, 'r'],
+                  ['READ RGB+W', read_rgbw, 'r'],
+                  ['RED', led_red, ''],
+                  ['GREEN', led_green, ''],
+                  ['BLUE', led_blue, ''],
                   ]
 
         for b in self.B:
             row = tk.Frame(master)
             ent = None
-            if b[2]:
+            if 'r' == b[2]:
                 ent = tk.Entry(row)
+                ent.config(state='readonly')
             # lambda is late-binding. This won't fly.
             #btn = tk.Button(row, text=b[0], width=24, command=lambda ent=ent: b[1](ent))
             btn = tk.Button(row, text=b[0], width=24, command=partial(b[1], ent))
@@ -149,9 +166,6 @@ class App:
 
     def stop_logging(self):
         logging.debug('stop_logging')
-
-    def set_logging_interval(self):
-        print(self.v.get())
 
     def set_clock(self):
         logging.debug('set_rtc')

@@ -193,19 +193,21 @@ def get_logger_name(ser, maxretry=10):
 
 def get_flash_id(ser, maxretry=10):
     logging.debug('get_flash_id()')
-    ser.reset_output_buffer()
+    ser.flushInput()
+    ser.flushOutput()
     ser.reset_input_buffer()
+    ser.reset_output_buffer()
 
     for i in range(maxretry):
         ser.write(b'spi_flash_get_unique_id')
         try:
             r = ser.readline().decode().strip()
-            logging.debug(r)
             if len(r) <= 0:
                 continue
+            logging.debug(r)
             if 16 == len(r) and r.startswith('E') and all([c in string.hexdigits for c in r]):
                 #ser.reset_input_buffer()
-                ser.readline()
+                #ser.readline()
                 return r
         except UnicodeDecodeError:
             pass
