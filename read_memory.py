@@ -8,9 +8,8 @@ from os import makedirs
 from os.path import join, exists
 from serial import Serial
 from serial.serialutil import SerialException
-from dev.crc_check import check_response
 from common import SPI_FLASH_SIZE_BYTE, SPI_FLASH_PAGE_SIZE_BYTE, SAMPLE_INTERVAL_CODE_MAP,\
-     is_logging, stop_logging, get_logging_config, read_vbatt, get_logger_name, get_flash_id,\
+     is_logging, stop_logging, get_logging_config, read_vbatt, get_logger_name, get_flash_id, read_range_core,\
      InvalidResponseException
 from bin2csv import bin2csv
 
@@ -24,38 +23,9 @@ BEGIN = 0
 END = SPI_FLASH_SIZE_BYTE - 1
 # request this many bytes each time (there's CRC32 at the end of each transaction)
 STRIDE = 16*SPI_FLASH_PAGE_SIZE_BYTE
-# retry at most this many times on comm error
-MAX_RETRY = 16
 # stop reading if the response is all empty (0xff for NOR flash)
 STOP_ON_EMPTY = True
 
-
-def read_range_core(ser, begin, end):
-    assert end >= begin
-
-    cmd = 'spi_flash_read_range{:x},{:x}\n'.format(begin, end)
-
-    for retry in range(MAX_RETRY):
-        ser.reset_input_buffer()
-        ser.reset_output_buffer()
-        
-        #logging.debug(cmd.strip())
-        #logging.debug('Reading {:X} to {:X} ({:.2f}%)'.format(begin, end, end/SPI_FLASH_SIZE_BYTE*100))
-        ser.write(cmd.encode())
-        expected_length = end - begin + 1 + 4
-        line = ser.read(expected_length)
-        if len(line) != expected_length:
-            time.sleep(0.1)
-            logging.warning('Response length mismatch. Expected {} bytes, got {} bytes'.format(expected_length, len(line)))
-            continue
-        if not check_response(line):
-            time.sleep(0.1)
-            logging.warning('CRC failure')
-            continue
-        
-        return line[:-4]    # strip CRC32
-    
-    return bytearray()
 
 def split_range(begin, end, pkt_size):
     assert end >= begin

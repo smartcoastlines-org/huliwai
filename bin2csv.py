@@ -13,7 +13,7 @@ from glob import glob
 from os.path import join, exists, basename, isdir, isfile
 import numpy as np
 from scipy.stats import describe
-from common import SPI_FLASH_PAGE_SIZE_BYTE, SAMPLE_INTERVAL_CODE_MAP, SAMPLE_SIZE, ts2dt, dt2ts
+from common import SPI_FLASH_PAGE_SIZE_BYTE, SAMPLE_INTERVAL_CODE_MAP, SAMPLE_SIZE_BYTE, ts2dt, dt2ts
 
 
 def find(pattern, *_, dironly=False, fileonly=False, default=None):
@@ -72,7 +72,7 @@ def bin2csv(fn_bin, fn_csv, config):
             if len(page) < SPI_FLASH_PAGE_SIZE_BYTE:
                 break
 
-            L = list(range(0, SPI_FLASH_PAGE_SIZE_BYTE, SAMPLE_SIZE))
+            L = list(range(0, SPI_FLASH_PAGE_SIZE_BYTE, SAMPLE_SIZE_BYTE))
             for a,b in list(zip(L[::], L[1::])):
                 d = struct.unpack('ffHHHHHH', page[a:b])
                 if any([math.isnan(dd) for dd in d]):

@@ -1,15 +1,13 @@
-# Start logging.
+# Start a new logging session.
 #
-# This will write to memory (whether it's clean or not).
-# It sets the RTC before logging.
+# If logger is already running, it offers the option to stop it first.
+# If logger memory is not empty, it won't start a new session unless it's wiped.
+# It sets the logger's clock before logging.
 #
 # TODO:
 #   get calibration eeprom
 #
 # Possible intervals: 0.2s, 1s, 60s
-#
-# Will reset config file
-# May add vbatt_pre and start_logging_time
 #
 # Stanley H.I. Lio
 # hlio@hawaii.edu
@@ -20,7 +18,7 @@ from os.path import join, exists
 from serial import Serial
 from serial.serialutil import SerialException
 from dev.set_rtc import set_rtc_aligned, read_rtc, ts2dt
-from common import is_logging, stop_logging, probably_empty, get_logging_config, read_vbatt, get_flash_id, get_logger_name, InvalidResponseException
+from common import is_logging, stop_logging, find_last_used_page, get_logging_config, read_vbatt, get_flash_id, get_logger_name, InvalidResponseException, SAMPLE_INTERVAL_CODE_MAP
 
 
 logging.basicConfig(level=logging.WARNING)
@@ -44,34 +42,26 @@ with Serial(PORT, 115200, timeout=1) as ser:
     try:
         logger_name = get_logger_name(ser)
         flash_id = get_flash_id(ser)
-        print('Name: ' + logger_name)
-        print('ID: ' + flash_id)
+        vbatt = read_vbatt(ser)
+        print('Logger "{}" (ID={})'.format(logger_name, flash_id))
+        print('Battery voltage {:.1f} V'.format(vbatt))
     except InvalidResponseException:
-        logging.error('Cannot find logger. Terminating.')
+        logging.error('Cannot find logger. ABORT.')
         sys.exit()
 
     save_default_port(PORT)
-
-    # Prepare config file
-    makedirs(join('data', flash_id), exist_ok=True)
-    if exists(join('data', flash_id, flash_id + '.config')):
-        r = input('Found existing config file. Overwrite? (yes/no; default=yes)').strip()
-        if r.lower() not in ['yes', '']:
-            print('No change made. Terminating.')
-            sys.exit()
-
 
     # Stop logging if necessary
     logging.debug('Stop ongoing logging if necessary...')
     try:
         if is_logging(ser):
-            r = input('Logger is still logging. Stop it first? (yes/no; default=yes)')
-            if r.strip().lower() in ['yes', '']:
+            r = input('Logger is already logging. Stop it first? (yes/no; default=no)')
+            if r.strip().lower() in ['yes']:
                 if not stop_logging(ser, maxretry=20):
                     logging.error('Logger is still logging and is not responding to stop_logging. Terminating.')
                     sys.exit()
             else:
-                logging.error('Logger must be stopped before it can be restarted. Terminating.')
+                print('Logger must be stopped before it can be restarted. ABORT.')
                 sys.exit()
     except InvalidResponseException:
         logging.error('Cannot verify logger status. Terminating.')
@@ -86,25 +76,16 @@ with Serial(PORT, 115200, timeout=1) as ser:
 
 
     # Set RTC to current UTC time
-    print('Setting logger clock to current UTC time... ', end='', flush=True)
-    cool = False
+    print('Setting logger clock to current UTC time...', flush=True)
     for i in range(MAX_RETRY):
         device_time = set_rtc_aligned(ser)
-        if abs(device_time - time.time()) <= 5:    # really should be <2s
-            cool = True
+        if abs(device_time - time.time()) <= 2:
             break
-    if not cool:
-        logging.error('Cannot set logger clock. Terminating.')
+    else:
+        print('Cannot set logger clock. Terminating.')
         sys.exit()
-    print(' {}'.format(ts2dt(device_time)))
-    '''print()
-    while True:
-        try:
-            print('Current logger time: {}. Press Ctrl+C to continue...'.format(ts2dt(read_rtc(ser))))
-            time.sleep(1)
-        except KeyboardInterrupt:
-            break'''
-
+    print('Logger time in UTC: {}'.format(ts2dt(device_time)))
+    
 
     # Set sample interval
     while True:
@@ -115,35 +96,34 @@ with Serial(PORT, 115200, timeout=1) as ser:
             if '' == r:
                 r = 'b'
             break
-
-
     # a numeric code, not in real time unit
     # check the C definitions for the code-to-second mapping
     # internally, logger uses {0,1,2...}
     logging_interval_code = int(ord(r) - ord('a'))
+    assert logging_interval_code in SAMPLE_INTERVAL_CODE_MAP
 
-    cool = False
     for i in range(MAX_RETRY):
         ser.write('set_logging_interval{}\n'.format(logging_interval_code).encode())
         c = get_logging_config(ser)
         if c['logging_interval_code'] == logging_interval_code:
-            cool = True
             break
-    if not cool:
-        logging.error('Could not set sampling interval. Terminating.')
+    else:
+        print('Could not set sampling interval. ABORT.')
         sys.exit()
 
-    if not probably_empty(ser):
-        print('(Memory is not clean.)')
 
-    time.sleep(1)
-    ser.flushInput()
+    # Check if memory is empty
+
+    is_memory_empty = find_last_used_page(ser) is None
+
+    if not is_memory_empty:
+        print('Memory is not empty.')
 
     while True:
-        r = input('Wipe memory? (yes/no; default=yes)')
-        if r.lower() in ['', 'yes', 'no']:
+        r = input('Wipe memory? (yes/no; default=no)')
+        if r.strip().lower() in ['', 'yes', 'no']:
             break
-    if r.strip().lower() in ['yes', '']:        # anything else is considered a NO (don't wipe).
+    if r.strip().lower() in ['yes']:
         logging.debug('User wants to wipe memory.')
         ser.write(b'clear_memory')
         THRESHOLD = 10
@@ -152,7 +132,7 @@ with Serial(PORT, 115200, timeout=1) as ser:
             try:
                 line = ser.read(100)
                 logging.debug(line)
-                if b'.' != line:
+                if not all([ord(b'.') == tmp for tmp in line]):
                     logging.debug('Not cool')
                     cool -= 1
                 else:
@@ -166,32 +146,32 @@ with Serial(PORT, 115200, timeout=1) as ser:
                 pass
 
         if cool <= 0:
-            print('Logger is not responding to clear_memory. Terminating.')
+            print('Logger is not responding to clear_memory. ABORT.')
+            sys.exit()
+    else:
+        # anything else is considered a NO (don't wipe).
+        if not is_memory_empty:
+            print('Logger cannot start if memory is not empty. ABORT.')
             sys.exit()
         
     # TODO: should store run number in logger so stop script can correlate start and stop configs
     # Basically a UUID for every logging session
-    print('Reading battery voltage...')
-    vbatt = read_vbatt(ser)
 
     print('Attempting to start logging...')
-    cool = False
     for i in range(MAX_RETRY):
         ser.write(b'start_logging')
         time.sleep(0.1)
         if is_logging(ser):
-            cool = True
             break
         else:
             logging.debug('... still not logging...')
-
-    if not cool:
-        logging.error('Logger refuses to start. Terminating.')
+    else:
+        print('Logger refuses to start. ABORT.')
         sys.exit()
 
     print('Logger is running.')
 
-    # Record metadata
+    # Record config and meta
     tmp = get_logging_config(ser)
     logging_start_time = tmp['logging_start_time']
     
@@ -200,29 +180,13 @@ with Serial(PORT, 115200, timeout=1) as ser:
               'logger_name':logger_name,
               'logging_start_time': logging_start_time,
               'logging_interval_code': logging_interval_code,
-              'vbatt_pre': vbatt,
+              'vbatt_pre': read_vbatt(ser),
               }
     
     config = json.dumps(config, separators=(',',':'))
     logging.debug(config)
-
     fn = '{}_{}.config'.format(flash_id, logging_start_time)
     fn = join('data', flash_id, fn)
     open(fn, 'w', 1).write(config)
 
-    '''print('Ctrl + C to terminate...')
-    with open('serial_log_{}.txt'.format(flash_id), 'w', 1) as fout:
-        while True:
-            try:
-                line = ser.readline()
-                if len(line):
-                    line = line.decode()
-                    print(line.strip())
-                    fout.write(line)
-            except KeyboardInterrupt:
-                break
-            except:
-                pass'''
-            
-#input('Done. Hit RETURN to exit.')
-print('Done.')
+    print('Config file saved to {}'.format(fn))

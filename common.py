@@ -15,6 +15,7 @@
 # Copyright 2018 Stanley H.I. Lio
 # hlio@hawaii.edu
 import logging, random, time, string, calendar
+from dev.crc_check import check_response
 from datetime import datetime
 
 
@@ -22,7 +23,10 @@ SAMPLE_INTERVAL_CODE_MAP = {0:1/5, 1:1, 2:60}
 # W25Q128JV: 128Mb, or 16MB. 65536 of 256-byte pages. Min. erase size = 1 sector = 16 pages (4096 bytes)
 SPI_FLASH_SIZE_BYTE = 16*1024*1024
 SPI_FLASH_PAGE_SIZE_BYTE = 256
-SAMPLE_SIZE = 20    # size of one sample in byte
+SAMPLE_SIZE_BYTE = 20    # size of one sample in byte
+# retry at most this many times on comm error
+MAX_RETRY = 16
+
 
 class InvalidResponseException(Exception):
     pass
@@ -129,18 +133,22 @@ def probably_empty(ser, maxretry=5):
 
 
 def get_logging_config(ser, maxretry=10):
-    logging.debug('get_logger_config()')
+    logging.debug('get_logging_config()')
     tags = ['logging_start_time', 'logging_stop_time', 'logging_interval_code', 'current_page_addr', 'byte_index_within_page']
     
     for i in range(maxretry):
         ser.write(b'get_logging_config')
         try:
-            r = ser.readline().decode().strip().split(',')
+            r = ser.readline()
             logging.debug(r)
-            if len(r) >= 3:  # ... isn't there any simple self-descriptive format? or an ultra-intelligent parser?
-                return dict(zip(tags, [int(tmp) for tmp in r]))
+            if len(r):
+                r = r.decode().strip().split(',')
+            if len(r):
+                r = [int(tmp) for tmp in r]
+                if len(r) >= 3:  # ... isn't there any simple self-descriptive format? or an ultra-intelligent parser?
+                    return dict(zip(tags, r))
         except:
-            logging.exception('')
+            logging.exception(r)
         time.sleep(random.randint(0, 50)/100)
     raise InvalidResponseException('Invalid/no response from logger')
 
@@ -168,11 +176,13 @@ def get_logger_name(ser, maxretry=10):
 
     # there's no easy way to tell whether the name is not set, the logger is not responding, or those gibberish characters really is the name
     # without proper framing and checksum in storage and in comm, any check you do here is just heuristics/guess/hack
+    # hindsight 20/20
 
     for i in range(maxretry):
         ser.write(b'get_logger_name')
         try:
             r = ser.readline()
+            # what about an empty string as name? You'd get no response (or all \x00 in the next version of firmware)
             if all(['\xff' == c for c in r[:-1]]):
                 # name is not set
                 logging.debug('name has not been set')
@@ -230,6 +240,62 @@ def get_metadata(ser, maxretry=10):
     config['logging_interval_code'] = metadata['logging_interval_code']
 
     return config
+
+def read_range_core(ser, begin, end):
+    assert end >= begin
+
+    cmd = 'spi_flash_read_range{:x},{:x}\n'.format(begin, end)
+
+    for retry in range(MAX_RETRY):
+        ser.reset_input_buffer()
+        ser.reset_output_buffer()
+        
+        #logging.debug(cmd.strip())
+        #logging.debug('Reading {:X} to {:X} ({:.2f}%)'.format(begin, end, end/SPI_FLASH_SIZE_BYTE*100))
+        ser.write(cmd.encode())
+        expected_length = end - begin + 1 + 4
+        line = ser.read(expected_length)
+        if len(line) != expected_length:
+            time.sleep(0.1)
+            logging.warning('Response length mismatch. Expected {} bytes, got {} bytes'.format(expected_length, len(line)))
+            continue
+        if not check_response(line):
+            time.sleep(0.1)
+            logging.warning('CRC failure')
+            continue
+        
+        return line[:-4]    # strip CRC32
+    return bytearray()
+
+def read_page(ser, page):
+    return read_range_core(ser, page*SPI_FLASH_PAGE_SIZE_BYTE, (page+1)*SPI_FLASH_PAGE_SIZE_BYTE - 1)
+
+def find_last_used_page(ser):
+    def is_empty(s):
+        return all([0xff == x for x in s])
+
+    def search(begin, end):
+        logging.debug('search({},{})'.format(begin, end))
+        
+        if begin >= end:
+            assert False
+        elif end - begin == 1:
+            #print(is_empty(self.read_page(begin)))
+            #print(is_empty(self.read_page(end)))
+            if not is_empty(read_page(ser, begin)):
+                return begin
+            else:
+                return None
+        else:
+            mid = int((end + begin)//2)
+
+        # in principle you only need to check the first byte. but god knows how the flash layout might change.
+        if is_empty(read_page(ser, mid)):
+            return search(begin, mid)
+        else:
+            return search(mid, end)
+
+    return search(0, SPI_FLASH_SIZE_BYTE//SPI_FLASH_PAGE_SIZE_BYTE)
 
 def list_serial_port():
     """ doesn't work on the pi. it doesn't show /dev/ttyS0"""
@@ -303,11 +369,10 @@ if '__main__' == __name__:
     import logging
     from serial import Serial
 
-    print(serial_port_best_guess())
+    logging.basicConfig(level=logging.DEBUG,\
+                        format='%(levelname)s:%(asctime)s:%(filename)s:%(funcName)s():%(message)s')
 
-    logging.basicConfig(level=logging.DEBUG)
-
-    DEFAULT_PORT = '/dev/ttyS0'
+    DEFAULT_PORT = serial_port_best_guess(prompt=True)
     PORT = input('PORT=? (default={})'.format(DEFAULT_PORT)).strip()
     if '' == PORT:
         PORT = DEFAULT_PORT
@@ -318,4 +383,6 @@ if '__main__' == __name__:
         print(read_vbatt(ser))
         print(probably_empty(ser))
         print(get_logging_config(ser))
+        print('{} page(s) used.'.format(find_last_used_page(ser) + 1))
+
     
