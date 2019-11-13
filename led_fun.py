@@ -1,10 +1,9 @@
 # fun with LEDs
 #
 #
-# MESH Lab
-# University of Hawaii
-# Copyright 2018 Stanley H.I. Lio
+# Stanley H.I. Lio
 # hlio@hawaii.edu
+# MESHLAB, UH Manoa
 import time
 from itertools import cycle
 from serial import Serial

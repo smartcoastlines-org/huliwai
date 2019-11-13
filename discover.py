@@ -1,9 +1,8 @@
 # Print metadata of attached logger.
 #
-# MESH Lab
-# University of Hawaii
-# Copyright 2018 Stanley H.I. Lio
+# Stanley H.I. Lio
 # hlio@hawaii.edu
+# MESHLAB, UH Manoa
 import time, logging
 from serial import Serial
 from common import get_logger_name, get_flash_id, read_vbatt, is_logging, get_logging_config, InvalidResponseException

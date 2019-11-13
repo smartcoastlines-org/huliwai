@@ -1,9 +1,8 @@
 # Read all sensors and plot in real-time.
 #
-# MESH Lab
-# University of Hawaii
-# Copyright 2018 Stanley H.I. Lio
+# Stanley H.I. Lio
 # hlio@hawaii.edu
+# MESHLAB, UH Manoa
 import time, functools, logging, calendar, math
 from serial import Serial
 from itertools import cycle

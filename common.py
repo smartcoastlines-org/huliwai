@@ -10,10 +10,9 @@
 #
 # interval codes: 0: 0.2s, 1: 1s, 2: 60s
 #
-# MESH Lab
-# University of Hawaii
-# Copyright 2018 Stanley H.I. Lio
+# Stanley H.I. Lio
 # hlio@hawaii.edu
+# MESHLAB, UH Manoa
 import logging, random, time, string, calendar
 from dev.crc_check import check_response
 from datetime import datetime
@@ -268,7 +267,10 @@ def read_range_core(ser, begin, end):
     return bytearray()
 
 def read_page(ser, page):
-    return read_range_core(ser, page*SPI_FLASH_PAGE_SIZE_BYTE, (page+1)*SPI_FLASH_PAGE_SIZE_BYTE - 1)
+    #return read_range_core(ser, page*SPI_FLASH_PAGE_SIZE_BYTE, (page+1)*SPI_FLASH_PAGE_SIZE_BYTE - 1)
+    begin = page*SPI_FLASH_PAGE_SIZE_BYTE
+    end = (page+1)*SPI_FLASH_PAGE_SIZE_BYTE - 1
+    return read_range_core(ser, begin, end)
 
 def find_last_used_page(ser):
     def is_empty(s):

@@ -2,6 +2,7 @@
 #
 # If logger is already running, it offers the option to stop it first.
 # If logger memory is not empty, it won't start a new session unless it's wiped.
+# If logger memory is empty, it no longer prompt for wiping memory.
 # It sets the logger's clock before logging.
 #
 # TODO:
@@ -45,6 +46,8 @@ with Serial(PORT, 115200, timeout=1) as ser:
         vbatt = read_vbatt(ser)
         print('Logger "{}" (ID={})'.format(logger_name, flash_id))
         print('Battery voltage {:.1f} V'.format(vbatt))
+        if vbatt < 2.2:
+            print('WARNING: Battery voltage is low.')
     except InvalidResponseException:
         logging.error('Cannot find logger. ABORT.')
         sys.exit()
@@ -118,39 +121,37 @@ with Serial(PORT, 115200, timeout=1) as ser:
 
     if not is_memory_empty:
         print('Memory is not empty.')
+        while True:
+            r = input('Wipe memory? (yes/no; default=no)')
+            if r.strip().lower() in ['', 'yes', 'no']:
+                break
+        if r.strip().lower() in ['yes']:
+            logging.debug('User wants to wipe memory.')
+            ser.write(b'clear_memory')
+            THRESHOLD = 10
+            cool = THRESHOLD
+            while cool > 0:
+                try:
+                    line = ser.read(100)
+                    logging.debug(line)
+                    if not all([ord(b'.') == tmp for tmp in line]):
+                        logging.debug('Not cool')
+                        cool -= 1
+                    else:
+                        logging.debug('cool')
+                        cool = THRESHOLD
 
-    while True:
-        r = input('Wipe memory? (yes/no; default=no)')
-        if r.strip().lower() in ['', 'yes', 'no']:
-            break
-    if r.strip().lower() in ['yes']:
-        logging.debug('User wants to wipe memory.')
-        ser.write(b'clear_memory')
-        THRESHOLD = 10
-        cool = THRESHOLD
-        while cool > 0:
-            try:
-                line = ser.read(100)
-                logging.debug(line)
-                if not all([ord(b'.') == tmp for tmp in line]):
-                    logging.debug('Not cool')
-                    cool -= 1
-                else:
-                    logging.debug('cool')
-                    cool = THRESHOLD
+                    print(line.decode(), end='', flush=True)
+                    if 'done.' in line.decode():
+                        break
+                except UnicodeDecodeError:
+                    pass
 
-                print(line.decode(), end='', flush=True)
-                if 'done.' in line.decode():
-                    break
-            except UnicodeDecodeError:
-                pass
-
-        if cool <= 0:
-            print('Logger is not responding to clear_memory. ABORT.')
-            sys.exit()
-    else:
-        # anything else is considered a NO (don't wipe).
-        if not is_memory_empty:
+            if cool <= 0:
+                print('Logger is not responding to clear_memory. ABORT.')
+                sys.exit()
+        else:
+            # anything else is considered a NO (don't wipe).
             print('Logger cannot start if memory is not empty. ABORT.')
             sys.exit()
         
