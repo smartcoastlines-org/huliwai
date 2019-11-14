@@ -3,12 +3,10 @@
 # Stanley H.I. Lio
 # hlio@hawaii.edu
 # MESHLAB, UH Manoa
-import struct, math, sys, csv, logging, json
+import struct, math, sys, csv, logging, json, statistics
 from os.path import join, exists
 import matplotlib.pyplot as plt
 from matplotlib.dates import DateFormatter
-import numpy as np
-#from scipy.stats import describe
 from bin2csv import find
 from common import ts2dt, dt2ts
 
@@ -59,12 +57,16 @@ if '__main__' == __name__:
 
     ts, t,p, als,white, r,g,b,w = read_and_parse_data(fn)
     begin, end = ts2dt(min(ts)), ts2dt(max(ts))
+
+    if len(ts) <= 1:
+        print('Only less than two measurements are available. ABORT.')
+
     print('{} samples from {} to {} spanning {}, average interval {:.3}s'.format(
         len(ts),
         begin,
         end,
         end - begin,
-        np.mean(np.diff(ts))))
+        ts[1] - ts[0]))
 
     # - - -
 

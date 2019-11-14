@@ -134,3 +134,5 @@ if '__main__' == __name__:
     print('Output CSV file: {}'.format(fn_csv))
     print('Output binary file: {}'.format(fn_bin))
     print('Took {:.1f} minutes.'.format((endtime - starttime)/60))
+    print('Save/copy this, you will need it if you want to run plot_csv.py: {}'.format(flash_id))
+    

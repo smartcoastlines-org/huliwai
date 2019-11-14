@@ -9,7 +9,6 @@ from itertools import cycle
 from datetime import datetime
 import matplotlib.pyplot as plt
 from matplotlib.dates import DateFormatter
-import numpy as np
 
 
 logging.basicConfig(level=logging.WARNING)

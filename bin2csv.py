@@ -11,8 +11,6 @@ import struct, math, sys, csv, json, logging
 from datetime import datetime
 from glob import glob
 from os.path import join, exists, basename, isdir, isfile
-import numpy as np
-from scipy.stats import describe
 from common import SPI_FLASH_PAGE_SIZE_BYTE, SAMPLE_INTERVAL_CODE_MAP, SAMPLE_SIZE_BYTE, ts2dt, dt2ts
 
 
@@ -58,10 +56,8 @@ def find(pattern, *_, dironly=False, fileonly=False, default=None):
                 return FN[int(r) - 1]
 
 def construct_timestamp(logging_start_time, sample_count, interval_second):
-    ts = np.linspace(0, sample_count - 1, num=sample_count)
-    ts *= interval_second
-    ts += logging_start_time
-    return ts
+    ts = list(range(0, sample_count))
+    return [x*interval_second + logging_start_time for x in ts]
 
 def bin2csv(fn_bin, fn_csv, config):
     logging.debug('Reading and parsing binary file...')
