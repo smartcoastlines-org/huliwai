@@ -7,7 +7,7 @@
 import time, logging, sys, struct
 from serial import Serial
 from common import get_logger_name, get_flash_id, read_vbatt, is_logging, get_logging_config,\
-     find_last_used_page, read_range_core,\
+     find_last_used_page, read_range_core, get_sample_count,\
      SPI_FLASH_SIZE_BYTE, SPI_FLASH_PAGE_SIZE_BYTE, SAMPLE_SIZE_BYTE, SAMPLE_INTERVAL_CODE_MAP,\
      InvalidResponseException
 from dev.set_rtc import read_rtc, ts2dt
@@ -20,7 +20,7 @@ tags = ['UTC_datetime', 'T_DegC', 'P_kPa', 'ambient_light_hdr', 'white_light_hdr
 SAMPLE_PER_PAGE = SPI_FLASH_PAGE_SIZE_BYTE//SAMPLE_SIZE_BYTE
 
 
-# given a sample index, calculate the page address and the byte index within that page
+# given a sample index, calculate (page address, byte index within that page)
 def sampleindex2flashaddress(sample_index):
     return int(sample_index//SAMPLE_PER_PAGE), int((sample_index%SAMPLE_PER_PAGE)*SAMPLE_SIZE_BYTE)
 
@@ -78,12 +78,7 @@ if '__main__' == __name__:
         print('Logger "{}" (ID={})'.format(logger_name, flash_id))
         print('Battery voltage {:.1f} V, clock {}'.format(vbatt, ts2dt(rtc)))
         print('Scanning logger memory...', end='', flush=True)
-        page_used = find_last_used_page(ser)
-        page_used = 0 if page_used is None else page_used + 1
-        
-        #print('{} page(s) in use.'.format(page_used))
-        # CAREFUL here, the last page might only be partially used.
-        sample_count = page_used * SAMPLE_PER_PAGE
+        sample_count = get_sample_count(ser)
         if 0 == sample_count:
             print(' Logger is empty. Terminating.')
             sys.exit()
@@ -91,13 +86,13 @@ if '__main__' == __name__:
         number_to_read = min(DOWNSAMPLE_N, sample_count)
         STRIDE = int(sample_count // number_to_read)
         m = '{} in steps of {}'.format(number_to_read, STRIDE) if STRIDE > 1 else 'everything'
-        print(' ~{} sample(s) in memory ({} page(s) out of {}).\r\nRequested {} sample(s); will read {}.'.\
-              format(sample_count, page_used, SPI_FLASH_SIZE_BYTE//SPI_FLASH_PAGE_SIZE_BYTE, DOWNSAMPLE_N, m))
+        print(' {} sample(s) in memory.\r\nRequested {} sample(s); will read {}.'.\
+              format(sample_count, DOWNSAMPLE_N, m))
         print('First sample taken at {} UTC.'.format(ts2dt(logging_start_time)))
         
         # - - -
 
-        assert (0,0) == sampleindex2flashaddress(date2sampleindex(logging_start_time, logging_start_time, sample_interval_second))
+        #assert (0,0) == sampleindex2flashaddress(date2sampleindex(logging_start_time, logging_start_time, sample_interval_second))
 
         ser.flushInput()
         ser.flushOutput()
@@ -107,10 +102,11 @@ if '__main__' == __name__:
         D = []
         current_page_index = None
         current_page = None
-        sample_indices = list(range(0, sample_count - 1, STRIDE))
+        sample_indices = list(range(0, sample_count, STRIDE))
         addr = [sampleindex2flashaddress(i) for i in sample_indices]
         print('Reading', end='', flush=True)
         for sample_index, (page_i,byte_i) in zip(sample_indices, addr):
+            #print(sample_index, page_i, byte_i)
             try:
                 if 0 == (sample_index//STRIDE) % (sample_count//STRIDE//10):
                     print('.', end='', flush=True)

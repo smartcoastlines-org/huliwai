@@ -22,10 +22,10 @@ def find(pattern, *_, dironly=False, fileonly=False, default=None):
         FN = list(filter(lambda x: isfile(x), FN))
 
     if len(FN) == 0:
-        logging.debug('No file/folder fits the criteria.')
+        logging.debug('No file/folder meets the criteria.')
         return None
     elif len(FN) == 1:
-        logging.debug('Only one file/folder fits the criteria.')
+        logging.debug('Only one file/folder meets the criteria.')
         return FN[0]
     else:
         while True:
@@ -38,13 +38,11 @@ def find(pattern, *_, dironly=False, fileonly=False, default=None):
                 r = input('Your choice: ').strip().upper()
 
             if 'last' == default:
-                if len(r.strip()) <= 0 and len(FN) > 0:
+                if len(r) <= 0:
                     return FN[-1]
                 #yeah that only makes sense for .bin. Not for logger selection.
 
             if r not in [str(v) for v in range(1, len(FN) + 1)]:
-                #r = input('Not an option. Give me the ID instead:')
-                print('Not an option. I\'ll take that as part of the ID.')
                 tmp = list(filter(lambda x: r in x, FN))
                 if len(tmp):
                     FN = tmp
@@ -53,6 +51,7 @@ def find(pattern, *_, dironly=False, fileonly=False, default=None):
                 else:
                     print('That\'s not in any of the remaining IDs.')
             else:
+                # take the input as the index
                 return FN[int(r) - 1]
 
 def construct_timestamp(logging_start_time, sample_count, interval_second):

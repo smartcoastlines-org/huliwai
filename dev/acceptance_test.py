@@ -6,9 +6,12 @@
 # hlio@hawaii.edu
 # MESH Lab
 # University of Hawaii
-import time, functools
+import time, functools, sys
+sys.path.append('..')
 from datetime import datetime
 from serial import Serial
+from common import serial_port_best_guess, save_default_port
+from dev.set_rtc import set_rtc
 
 
 def q(ser, cmd, wait_second=0):
@@ -29,20 +32,22 @@ def check(cmd, test):
         print('FAIL! ({})'.format(cmd))
 
 
-DEFAULT_PORT = '/dev/ttyS0'
-PORT = input('PORT=? (default={})'.format(DEFAULT_PORT))
+print('Detected ports:')
+DEFAULT_PORT = serial_port_best_guess(prompt=True)
+print('- - -')
+PORT = input('Which one to use? (default={})'.format(DEFAULT_PORT)).strip()
+# empty input, use default
 if '' == PORT:
     PORT = DEFAULT_PORT
+print(PORT)
 
 with Serial(PORT, 115200, timeout=1) as ser:
 
     q = functools.partial(q, ser)
 
-
-    check('spi_flash_get_jedec_id', lambda r: r.strip() == '4018')
-    check('spi_flash_get_manufacturer_id', lambda r: r.strip() == 'EF')
-    check('spi_flash_get_device_id', lambda r: r.strip() == '17')
-
+    #check('spi_flash_get_jedec_id', lambda r: r.strip() == '4018')
+    #check('spi_flash_get_manufacturer_id', lambda r: r.strip() == 'EF')
+    #check('spi_flash_get_device_id', lambda r: r.strip() == '17')
 
     def ct(t):
         t = float(t.replace('Deg.C',''))
@@ -72,6 +77,8 @@ with Serial(PORT, 115200, timeout=1) as ser:
         r = [float(v) for v in r.strip().split(',')]
         return all([rr >= 0 for rr in r])
     check('read_rgbw', crgbw)
+
+    set_rtc(ser)
 
     def f(r):
         #print(datetime.fromtimestamp(int(r.strip())))

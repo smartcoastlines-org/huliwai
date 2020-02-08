@@ -273,6 +273,11 @@ def read_page(ser, page):
     return read_range_core(ser, begin, end)
 
 def find_last_used_page(ser):
+    """Find the page address of the last non-empty page. Return None if all of them are empty.
+    CAUTION: page address is 0-based. If the result is page N, the number of used pages is N+1.
+    CAUTION: it being a binary search means it doesn't actually scan each and every page.
+    The assumption is page Q won't get used until page P is used where Q > P.
+    """
     def is_empty(s):
         return all([0xff == x for x in s])
 
@@ -298,6 +303,26 @@ def find_last_used_page(ser):
             return search(mid, end)
 
     return search(0, SPI_FLASH_SIZE_BYTE//SPI_FLASH_PAGE_SIZE_BYTE)
+
+def get_sample_count(ser):
+    last_page_index = find_last_used_page(ser)
+    if last_page_index is None:
+        return 0
+    buf = read_page(ser, last_page_index)
+    assert not all([0xff == x for x in buf])
+    byte_used = SPI_FLASH_PAGE_SIZE_BYTE - next(k for k,v in enumerate(reversed(buf)) if v not in [0, 0xff])
+    #print(last_page_index, byte_used)
+    # Careful, last_page_index is 0-based. The number of non-empty pages is last_page_index + 1, but
+    # here you are summing up the full pages plus the bits in the last (possibly non-full) page.
+    # Really it is (last_page_index + 1 - 1).
+    return last_page_index*(SPI_FLASH_PAGE_SIZE_BYTE//SAMPLE_SIZE_BYTE) + byte_used//SAMPLE_SIZE_BYTE
+    # huh. is A//X + B//X === (A + B)//X? Is the // operator distributive? Can I do
+    # (last_page*SPI_FLASH_PAGE_SIZE_BYTE + byte_used)//SAMPLE_SIZE_BYTE?
+    # Nope. 7//10 + 3//10 != 10//10
+    # What about the associative property? The * vs. the //, does it matter if I leave out the ()?
+    # It does and you must not. 2*(5//10) != (2*5)//10
+    # The * takes precedence over the //, so leaving out the () would be wrong.
+    # You could have just kept the sampe_per_page = SPI_FLASH_PAGE_SIZE_BYTE//SAMPLE_SIZE_BYTE line you know.
 
 def list_serial_port():
     """ doesn't work on the pi. it doesn't show /dev/ttyS0"""
@@ -380,11 +405,12 @@ if '__main__' == __name__:
         PORT = DEFAULT_PORT
 
     with Serial(PORT, 115200, timeout=1) as ser:
-        print(get_logger_name(ser))
+        '''print(get_logger_name(ser))
         print(is_logging(ser))
         print(read_vbatt(ser))
         print(probably_empty(ser))
         print(get_logging_config(ser))
-        print('{} page(s) used.'.format(find_last_used_page(ser) + 1))
+        print('{} page(s) used.'.format(find_last_used_page(ser) + 1))'''
+        print(get_sample_count(ser))
 
     

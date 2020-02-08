@@ -17,13 +17,14 @@ from bin2csv import bin2csv
 logging.basicConfig(level=logging.WARNING)
 
 
-# read memory range from here
+# Read memory range (in byte) from here...
 BEGIN = 0
-# to here
+# ... to here
 END = SPI_FLASH_SIZE_BYTE - 1
-# request this many bytes each time (there's CRC32 at the end of each transaction)
-STRIDE = 16*SPI_FLASH_PAGE_SIZE_BYTE
-# stop reading if the response is all empty (0xff for NOR flash)
+# Request this many bytes each time
+# The response will be 4-byte longer (CRC32 at the end of the response)
+CHUNK_SIZE = 16*SPI_FLASH_PAGE_SIZE_BYTE
+# Stop reading if the response is all empty (0xff for NOR flash)
 STOP_ON_EMPTY = True
 
 
@@ -117,7 +118,7 @@ if '__main__' == __name__:
 
         starttime = time.time()
         with open(fn_bin, 'wb') as fout:
-            for begin, end in split_range(BEGIN, END, STRIDE):
+            for begin, end in split_range(BEGIN, END, CHUNK_SIZE):
                 print('Reading {:X} to {:X} ({:.2f}% of total capacity)'.format(begin, end, end/SPI_FLASH_SIZE_BYTE*100))
                 line = read_range_core(ser, begin, end)
                 if len(line) <= 0:
