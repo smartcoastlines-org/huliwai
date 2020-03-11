@@ -45,7 +45,7 @@ with Serial(PORT, 115200, timeout=1) as ser:
         flash_id = get_flash_id(ser)
         vbatt = read_vbatt(ser)
         print('Logger "{}" (ID={})'.format(logger_name, flash_id))
-        print('Battery voltage {:.1f} V'.format(vbatt))
+        print('Battery voltage: {:.1f} V'.format(vbatt))
         if vbatt < 2.2:
             print('WARNING: Battery voltage is low.')
     except InvalidResponseException:

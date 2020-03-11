@@ -51,7 +51,7 @@ with Serial(PORT, 115200, timeout=1) as ser:
 
     def ct(t):
         t = float(t.replace('Deg.C',''))
-        return t > 10 and t < 40
+        return t > 20 and t < 40
     check('read_temperature', ct)
 
 
@@ -94,16 +94,56 @@ with Serial(PORT, 115200, timeout=1) as ser:
         return abs(Vcc - 3.3)/3.3 < 0.1 and Vbatt >= 1.8
     check('read_sys_volt', f)
 
-    
-    ser.write('red_led_on'.encode())
-    time.sleep(0.2)
-    ser.write('red_led_off'.encode())
-    
-    ser.write('green_led_on'.encode())
-    time.sleep(0.2)
-    ser.write('green_led_off'.encode())
-    
-    ser.write('blue_led_on'.encode())
-    time.sleep(0.2)
-    ser.write('blue_led_off'.encode())
 
+    # not foolproof, but takes little work.
+    C = ['red', 'green', 'blue']
+    good = True
+    for k,c in enumerate(C):
+        ser.write('{}_led_on'.format(c).encode())
+        time.sleep(0.1)
+        ser.write(b'read_rgbw')
+        a = float(ser.readline().decode().strip().split(',')[k])
+        ser.write('{}_led_off'.format(c).encode())
+        time.sleep(0.1)
+        ser.write(b'read_rgbw')
+        b = float(ser.readline().decode().strip().split(',')[k])
+        good &= a > 1.1*b
+    print('PASS' if good else 'FAIL! (rgb)')
+    
+
+    ser.write(b'red_led_on')
+    ser.write(b'green_led_on')
+    ser.write(b'blue_led_on')
+    time.sleep(0.1)
+    ser.write(b'read_ambient_lx')
+    a = float(ser.readline().decode().strip().split(',')[0].split(' ')[0])
+    ser.write(b'red_led_off')
+    ser.write(b'green_led_off')
+    ser.write(b'blue_led_off')
+    time.sleep(0.1)
+    ser.write(b'read_ambient_lx')
+    b = float(ser.readline().decode().strip().split(',')[0].split(' ')[0])
+    print('PASS' if a > 1.1*b else 'FAIL! (ambient light)')
+
+
+    '''ser.write(b'clear_memory')
+    for _ in range(200):
+        time.sleep(0.1)
+        r = ser.readline().decode().strip()
+        if len(r):
+            print(r, end='')
+        else:
+            break'''
+
+
+    ser.write(b'set_logging_interval0\n')
+    time.sleep(0.5)
+    ser.write(b'start_logging')
+    for _ in range(5):
+        ser.write(b'is_logging')
+        if not ser.readline().decode().strip().startswith('1'):
+            print('FAIL! (start_logging)')
+            break
+        time.sleep(1)
+    ser.write(b'stop_logging')
+    print('PASS')    
